@@ -1,0 +1,229 @@
+---
+title: "Location Patterns of NYC Shooting Incidents"
+author: 
+date:
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## 1. Introduction
+
+In this project, I work with the **NYPD Shooting Incident Data (Historic)** dataset. This dataset is publicly available on the Data.gov website and includes every recorded shooting incident in New York City from the beginning of 2006 through the end of 2024.
+
+The purpose of my project is to study the location patterns of shooting incidents in NYC over the past 19 years. By focusing only on the geographic side of the data, I aim to understand where shootings happened more often, and how location patterns have changed over time.
+
+
+## 2. Import the Dataset
+
+Below, I import the **NYPD Shooting Incident Data (Historic)** dataset directly from the CSV link I found on Data.gov. 
+
+You can use my link \url{https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD} directly, or you can go to \url{https://catalog.data.gov/dataset} and search for the dataset titled **NYPD Shooting Incident Data (Historic)** for reproducibility purposes.
+
+```{r setup, message=FALSE}
+library(tidyverse)
+```
+
+```{r import}
+# Import NYPD Shooting Incident Data
+link = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+shootings_raw = read_csv(link)
+
+# Take a brief look at the dataset
+glimpse(shootings_raw)
+```
+
+
+## 3. Summary and Data Cleaning
+
+After importing the dataset, I first looked at the summary of all columns. Since my project focuses only on location patterns, I only keep the variables that are related to the geography of each incident. These variables are: INCIDENT_KEY, OCCUR_DATE, OCCUR_TIME, BORO, PRECINCT, Latitude, and Longitude. All other columns are removed because they are not needed for analyzing location patterns.
+
+
+```{r select}
+# Keeping columns related to where and when each incident occurred
+shootings_location = shootings_raw %>%
+  select(
+    INCIDENT_KEY,
+    BORO,
+    PRECINCT,
+    OCCUR_DATE,
+    OCCUR_TIME,
+    LATITUDE = Latitude,
+    LONGITUDE = Longitude
+  )
+# Check the dataset
+summary(shootings_location)
+
+```
+
+After checking the summary of the shootings_location dataset, I found that several changes were needed to clean the data and prepare it for analysis. I convert BORO and PRECINCT into factors because they both are categorical variables. I also convert OCCUR_DATE to a proper date format so I can look at long-term patterns from 2006 to 2024. Additionally, I remove 97 missing values of LATITUDE and LONGITUDE because these incidents cannot be placed on the map or used in any location analysis. After applying these cleaning steps, the dataset is ready for analyzing location patterns in New York City.
+
+
+```{r clean}
+shootings_clean = shootings_location %>%
+  mutate(
+    # Change BORO to factor
+    BORO = as.factor(BORO),
+    # Change PRECINCT to factor
+    PRECINCT = as.factor(PRECINCT),
+    # Proper date types
+    OCCUR_DATE = mdy(OCCUR_DATE)
+  ) %>%
+  # Remove missing data
+  filter(
+    !is.na(LATITUDE),
+    !is.na(LONGITUDE)
+  ) 
+
+# Check summary of cleaned dataset
+summary(shootings_clean)
+```
+
+
+
+\newpage
+## 4. Borough-Level Analysis
+
+In this section, I look at shooting incidents at the borough level to understand the overall location patterns across New York City. 
+
+### 4.1 Total Shooting Incidents by Borough
+
+First, I calculate the total number of shooting incidents for each borough from 2006 to 2024 and make a bar chart. This helps me compare how shooting activity is distributed across the five boroughs.
+
+```{r borough-total, warning = FALSE}
+# Count total incidents by borough
+borough_total = shootings_clean %>%
+  group_by(BORO) %>%
+  summarise(total_shootings = n())
+
+# Bar Chart
+my_palette = c(
+  "BRONX"         = "#FC8B60",   
+  "BROOKLYN"      = "#9A60B4",
+  "MANHATTAN"     = "#EE6666",
+  "QUEENS"        = "#73C0DE",
+  "STATEN ISLAND" = "#FAC859"
+)
+
+ggplot(borough_total, aes(x = BORO, y = total_shootings, fill = BORO)) +
+  geom_col() +
+  scale_fill_manual(values = my_palette) +
+  labs(
+    title = "Total Shooting Incidents by Borough 2006-2024",
+    x = "Borough",
+    y = "Shooting Incidents"
+  ) +
+  theme_minimal()
+```
+
+This bar chart shows the total number of shooting incidents in each borough from 2006 to 2024. Brooklyn has the highest number of shootings during this period, followed by the Bronx. Queens and Manhattan have fewer incidents, and Staten Island has the lowest count. This gives me a general idea of where experienced more shooting activities in New York City.
+
+### 4.2 Trends in NYPD Shooting Incidents by Borough 2006-2024
+
+Next I want to take a look at shooting trends over time for each of the five boroughs. To do this, I first extracted the year from each incident date and then calculated the total number of shootings per borough per year. I plotted these counts on a line chart, which clearly shows how shooting activity has changed over the past 19 years in each borough. This visualization makes it easy to compare long-term trends and identify boroughs with consistently high or rising shooting incidents.
+
+```{r trend_plot , warning=FALSE}
+# Add a year column
+shootings_year = shootings_clean %>%
+  mutate(YEAR = year(OCCUR_DATE))
+
+# Count shootings per borough per year
+shootings_by_boro_year = shootings_year %>%
+  group_by(BORO, YEAR) %>%
+  summarize(count = n(), .groups = "drop")
+
+# Plot the trend
+ggplot(shootings_by_boro_year, aes(x = YEAR, y = count, color = BORO)) +
+  geom_line(size = 1) +
+  geom_point(size = 1.5) +
+  scale_color_manual(values = my_palette) +
+  labs(
+    title = "Trends in NYPD Shooting Incidents by Borough 2006-2024",
+    x = "Year",
+    y = "Number of Shooting Incidents",
+    color = "Borough"
+  ) +
+  theme_minimal()
+```
+
+The Chart above shows how shooting incidents have changed in each of the five boroughs from 2006 to 2024. Overall, Brooklyn and Bronx consistently have the highest number of shootings. Queens and Manhattan have moderate levels of shootings compared to Brooklyn and Bronx. Those four boroughs followed similar patterns over the years: a downward trend from around 2012 to 2018, a noticeable increase from 2019 to 2020, and then a continuing drop in numbers after that. Staten Island has the lowest number of incidents every year, with very little change over time.
+
+
+
+
+
+\newpage
+## 5. Precinct-Level Analysis
+
+In the previous section, I looked at shooting patterns at the borough level. However, each borough is made up of many precincts, and shooting incidents are not evenly spread inside a borough. To see the location patterns in more detail, I now zoom in to the precinct level.
+
+### 5.1 Top 5 Shooting Precincts in Each Borough 2006-2024
+
+To focus on the areas that matter most, I look at the top 5 precincts with the highest number of shootings in each borough. This gives a clearer picture of where shootings have been most concentrated from 2006 to 2024, without making the analysis too complicated or overwhelming.
+
+```{r top5_chart}
+
+# create a table shows top 5 precincts per borough
+top5_precinct = shootings_clean %>%
+  group_by(BORO, PRECINCT) %>%
+  summarize(Total_Shootings = n(), .groups = "drop") %>%
+  group_by(BORO) %>%
+  slice_max(order_by = Total_Shootings, n = 5, with_ties = FALSE) %>%
+  ungroup()
+
+# Draw a bar chart to make it more visualized
+ggplot(top5_precinct, aes(x = PRECINCT, y = Total_Shootings, fill= BORO)) +
+  geom_col() +
+  facet_wrap(~BORO, scales = "free_x") +
+  scale_fill_manual(values = my_palette) +
+  labs(
+    title = "Top 5 Shooting Precincts in Each Borough 2006-2024",
+    x = "Precinct",
+    y = "Total Shooting Incidents",
+    fill = "Rank"
+  ) +
+  theme_minimal()
+
+```
+
+The chart shows the five precincts with the highest number of shooting incidents in each borough from 2006 to 2024. Brooklyn and the Bronx each have several precincts with very high totals, which matches what we saw at the borough level. In Brooklyn, Precincts 67, 73, and 75 stand out as the main hotspots. In the Bronx, precincts 44, 46, and 47 have the highest shooting activity. Manhattan and Queens also have their own top precincts, such as Manhattan’s 32nd Precinct and Queens’ 113th Precinct, but their totals are lower compared to the major hotspots in Brooklyn and the Bronx. Staten Island has the lowest numbers overall, and only Precinct 120 shows a noticeable count. This plot shows that shooting incidents are not spread evenly across precincts. Instead, each borough has a few precincts with much higher totals than the others.
+
+
+## 6. Model
+
+After exploring the borough-level patterns and the top precincts within each borough, I want to confirm whether the differences we see between boroughs are statistically meaningful. The visualizations suggest that Brooklyn and Bronx have higher shooting counts than the other boroughs, but graphs alone cannot control for the changes in shootings over time. Since shootings rise and fall during different periods, especially around 2012–2018 and again in 2020, I use a simple Poisson regression model to account for the effect of year. This model allows me to check whether some boroughs still have significantly more shootings even after adjusting for the yearly trend. This helps verify that the borough differences are real and not just caused by variation across years.
+
+
+```{r model, warning=FALSE}
+# create yearly shooting counts per borough
+shooting_counts = shootings_clean %>%
+  mutate(YEAR = year(OCCUR_DATE)) %>%
+  group_by(BORO, YEAR) %>%
+  summarize(count = n(), .groups = "drop")
+
+#Set MANHATTAN as reference
+shooting_counts$BORO <- relevel(
+  factor(shooting_counts$BORO),
+  ref = "MANHATTAN"
+)
+
+# Build the Poisson model
+model = glm(count ~ BORO + YEAR, data = shooting_counts, family = poisson)
+
+# Check model
+summary(model)
+```
+
+After controlling for year, the model shows clear differences between the boroughs. Brooklyn and the Bronx have significantly higher shooting counts compared to Manhattan, while Queens has only a slightly higher level. Staten Island remains much lower than all other boroughs. The coefficient for year is negative and significant, which means shootings have been decreasing over time across the city. These results confirm the patterns we observed in the visualizations and show that the borough differences are statistically meaningful, even after adjusting for yearly changes.
+
+\newpage
+## 7. Conclusion
+
+In this project, I analyzed the **NYPD Shooting Incident Data (Historic)** to explore the location patterns of shooting incidents in New York City from 2006 to 2024. By looking at the data from both the borough and precinct levels, I was able to identify where shootings happened most often and how these patterns changed over time. The descriptive results showed that Brooklyn and the Bronx consistently have the highest shooting activity. The top 5 precincts in each borough also revealed clear hotspots that contribute to the higher numbers in Brooklyn and the Bronx. To confirm the differences across boroughs, I used a simple Poisson regression model. After controlling for year, the model showed that Brooklyn and the Bronx still have significantly higher shooting counts than Manhattan. The year coefficient was negative, which supports the overall decreasing trend in recent years. This means the patterns we saw in the plots are not just due to certain unusual years but reflect real differences between the boroughs.
+
+
+## 8. Possible Bias
+
+There are some limitations in this analysis. The data only includes reported shootings, so it may miss incidents that were never reported or were recorded incorrectly. Reporting practices may also have changed over the years. Looking at boroughs also ignores differences in population size, neighborhood conditions, and police activity, which could affect the number of shootings in each area. Those limit the prescriptive value of my findings.
+
+I also recognize that I might have my own personal bias when looking at this data. Before doing this project, I already had impressions about which boroughs were “more dangerous,” and that could influence how I expect the results to look. To reduce this bias, I followed the same cleaning steps for all boroughs, used the data directly without making assumptions, and relied on the model output instead of my own expectations.
